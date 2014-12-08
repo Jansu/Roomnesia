@@ -110,7 +110,7 @@ public class Roomnesia extends InputAdapter implements ApplicationListener {
 		camera.position.set(viewportWidth/2, viewportHeight/2, 0);
 		camera.update();
 
-		viewport = new ExtendViewport(Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), camera);
+		viewport = new ExtendViewport(viewportWidth, viewportHeight, viewportWidth, viewportHeight, camera);
 		createPhysicsWorld();
 
 		/** BOX2D LIGHT STUFF BEGIN */
@@ -283,10 +283,11 @@ public class Roomnesia extends InputAdapter implements ApplicationListener {
 		Gdx.gl.glClearColor(0, 0, 0, 1);
 		Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 		
+		batch.setProjectionMatrix(camera.combined);
 		if (showTitle) {
-			batch.setProjectionMatrix(normalProjection);
+//			batch.setProjectionMatrix(normalProjection);
 			batch.begin();
-			batch.draw(Assets.title, 0, 0);
+			batch.draw(Assets.title, 0, 0, viewportWidth, viewportHeight);
 			batch.end();
 		} else {
 
@@ -609,8 +610,8 @@ public class Roomnesia extends InputAdapter implements ApplicationListener {
 
 	@Override
 	public void resize(int width, int height) {
-		// TODO Auto-generated method stub
-
+		viewport.update(width, height);
+		normalProjection.setToOrtho2D(0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
 	}
 
 	@Override
