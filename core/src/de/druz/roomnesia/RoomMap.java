@@ -24,4 +24,13 @@ public class RoomMap {
 		}
 		return count;
 	}
+
+	public boolean isAllRoomsLit() {
+		for (Room room : rooms) {
+			if (!room.isRoomLit()) {
+				return false;
+			}
+		}
+		return true;
+	}
 }

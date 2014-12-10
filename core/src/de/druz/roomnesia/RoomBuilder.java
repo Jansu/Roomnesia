@@ -42,18 +42,29 @@ public class RoomBuilder {
 
 	
 	public static Room buildRoom(World world, RoomMap map, int startX, int startY, Vector2 movedBy) {
-		Gdx.app.log("debug", "Building new Room at Start " + startX + ", " + startY);
-		Room room = new Room();
-
-		int x1 = startX-(MathUtils.random(3)+3);
-		int x2 = startX+(MathUtils.random(3)+3);
-		int y1 = startY-(MathUtils.random(3)+3);
-		int y2 = startY+(MathUtils.random(3)+3);
-		x1 = giveValidX(x1);
-		x2 = giveValidX(x2);
-		y1 = giveValidY(y1);
-		y2 = giveValidY(y2);
-		makeRoom(world, map, room, startX, startY, movedBy, x1, y1, x2, y2);
+		Room room;
+		int x1;
+		int x2;
+		int y1;
+		int y2;
+		boolean notDone = true;
+		do {
+			Gdx.app.log("debug", "Building new Room at Start " + startX + ", " + startY);
+			room = new Room();
+			x1 = startX-(MathUtils.random(2)+3);
+			x2 = startX+(MathUtils.random(2)+3);
+			y1 = startY-(MathUtils.random(2)+3);
+			y2 = startY+(MathUtils.random(2)+3);
+			x1 = giveValidX(x1);
+			x2 = giveValidX(x2);
+			y1 = giveValidY(y1);
+			y2 = giveValidY(y2);
+			try {
+				notDone = !makeRoom(world, map, room, startX, startY, movedBy, x1, y1, x2, y2);
+			} catch (Exception e) {
+				Gdx.app.error("debug", String.format("Unable to make room for %d,%d %d,%d starting at %d,%d", x1, y1, x2, y2, startX, startY), e);
+			}
+		} while (notDone);
 		map.rooms.add(room);
 		
 		return room;
@@ -77,16 +88,14 @@ public class RoomBuilder {
 		return y;
 	}
 
-	private static void makeRoom(World world, RoomMap roomMap, Room room, int startX, int startY, Vector2 orgMoveBy, int x1, int y1, int x2, int y2) {
+	private static boolean makeRoom(World world, RoomMap roomMap, Room room, int startX, int startY, Vector2 orgMoveBy, int x1, int y1, int x2, int y2) {
 		Vector2 pos = new Vector2(startX, startY);
 		Vector2 moveBy = orgMoveBy.cpy().limit(1).rotate(90);
 		pos.add(moveBy);
 		Room[][] origMap = roomMap.map;
 		Room[][] map = new Room[origMap.length][origMap[0].length];
 		for (int i = 0; i < origMap.length; i++) {
-			for (int j = 0; j < origMap[0].length; j++) {
-				map[i][j] = origMap[i][j];
-			}
+			map[i] = origMap[i].clone();
 		}
 		Set<Vector2> blockedTiles = blockEntrences(new Vector2(startX, startY), roomMap, map, origMap);
 		
@@ -97,74 +106,40 @@ public class RoomBuilder {
 
 		// add Door at entrancePoint
 		if (orgMoveBy.x > 0.5f) {
-			room.tiles[startX][startY] = DOOR_LEFT;
+			setDoor(room, startX,startY, DOOR_LEFT);
 		} else if (orgMoveBy.x < -0.5f) {
-			room.tiles[startX][startY] = DOOR_RIGHT;
+			setDoor(room, startX,startY, DOOR_RIGHT);
 		} else if (orgMoveBy.y > 0.5f) {
-			room.tiles[startX][startY] = DOOR_BOTTOM;
+			setDoor(room, startX,startY, DOOR_BOTTOM);
 		} else if (orgMoveBy.y < -0.5f) {
-			room.tiles[startX][startY] = DOOR_TOP;
+			setDoor(room, startX,startY, DOOR_TOP);
 		} 
-		Vector2 startPos = new Vector2(startX, startY);
-		room.doors.add(new Door(startPos , Roomnesia.currentRoom.isRoomLit()));
-		Roomnesia.currentRoom.doorAt(startPos).isExplored = true;
+//		Roomnesia.currentRoom.doorAt(startPos).isExplored = true;
 		
+		Gdx.app.log("debug", String.format("Starting mapping"));
+		int endX = Math.round(startX-moveBy.x);
+		int endY = Math.round(startY-moveBy.y);
+		int iteratitons = 0;
 		do {
+			iteratitons++;
+			if (iteratitons > 100) {
+				throw new IllegalStateException("Did not finish room after 100 iterations");
+			}
 //			Gdx.app.log("debug", String.format("checking for pos %s, moved by %s", pos, moveBy));
-			if (canMoveBy(map, pos, moveBy.cpy().rotate(90), x1, y1, x2, y2, blockedTiles)) {
+			if (canMoveBy(room, map, pos, moveBy.cpy().rotate(90), x1, y1, x2, y2, blockedTiles)) {
+//				Gdx.app.log("debug", String.format("move Left"));
 				moveBy.rotate(90);
-//				Gdx.app.log("debug", String.format("can move Left"));
 				// can move left, has to be inner corner 
-				if (moveBy.x > 0.5f) {
-					// moving right
-					setTile(room, CORNER_TOP_RIGHT, pos);
-				} else if (moveBy.x < -0.5f) {
-					// moving left
-					setTile(room, CORNER_BOTTOM_LEFT, pos);
-				} else if (moveBy.y > 0.5f) {
-					// moving up
-					setTile(room, CORNER_TOP_LEFT, pos);
-				} else {
-					// moving down
-					setTile(room, CORNER_BOTTOM_RIGHT, pos);
-				}
-			} else if (canMoveBy(map, pos, moveBy, x1, y1, x2, y2, blockedTiles)) {
-//				Gdx.app.log("debug", String.format("can move straight"));
+				determineInnerCorner(room, pos, moveBy);
+			} else if (canMoveBy(room, map, pos, moveBy, x1, y1, x2, y2, blockedTiles)) {
+//				Gdx.app.log("debug", String.format("move straight"));
 				// can move straight, has to be either top, left, bottom, right
-				if (moveBy.x > 0.5f) {
-					// moving right
-					setTile(room, TOP, pos);
-					topTiles.add(pos.cpy());
-				} else if (moveBy.x < -0.5f) {
-					// moving left
-					setTile(room, BOTTOM, pos);
-					bottomTiles.add(pos.cpy());
-				} else if (moveBy.y > 0.5f) {
-					// moving up
-					setTile(room, LEFT, pos);
-					leftTiles.add(pos.cpy());
-				} else {
-					// moving down
-					setTile(room, RIGHT, pos);
-					rightTiles.add(pos.cpy());
-				}
-			} else if (canMoveBy(map, pos, moveBy.cpy().rotate(-90), x1, y1, x2, y2, blockedTiles)) {
+				determineStraight(room, pos, moveBy, map, topTiles, bottomTiles, leftTiles, rightTiles);
+			} else if (canMoveBy(room, map, pos, moveBy.cpy().rotate(-90), x1, y1, x2, y2, blockedTiles)) {
+//				Gdx.app.log("debug", String.format("move right"));
 				moveBy.rotate(-90);
-//				Gdx.app.log("debug", String.format("can move right"));
 				// can move right, has to be edge corner
-				if (moveBy.x > 0.5f) {
-					// moving right
-					setTile(room, TOP_LEFT, pos);
-				} else if (moveBy.x < -0.5f) {
-					// moving left
-					setTile(room, BOTTOM_RIGHT, pos);
-				} else if (moveBy.y > 0.5f) {
-					// moving up
-					setTile(room, BOTTOM_LEFT, pos);
-				} else {
-					// moving down
-					setTile(room, TOP_RIGHT, pos);
-				}
+				determineOuterCorner(room, pos, moveBy);
 			} else {
 				// fuckit, how did this happen?
 				moveBy.rotate(180);
@@ -172,14 +147,46 @@ public class RoomBuilder {
 				Gdx.app.error("error", String.format("Can not move in either direction at %s", pos));
 			}
 			pos.add(moveBy);
-		} while (!(Math.round(pos.x) == startX && Math.round(pos.y) == startY));
+		} while (!(Math.round(pos.x) == endX && Math.round(pos.y) == endY));
 		
-		if (Roomnesia.roomVisitCount > 15 && roomMap.unexpoloredDoorCount() == 0) {
+		// set last tile
+		Vector2 startVec = new Vector2(startX, startY);
+		float angleBetweenMoveAndToGoal = startVec.sub(pos).angle(moveBy);
+		Gdx.app.log("debug", String.format("Angle: ", angleBetweenMoveAndToGoal));
+		if (angleBetweenMoveAndToGoal > 1) {
+			determineOuterCorner(room, pos, moveBy.cpy().rotate(-90));
+		} else if (angleBetweenMoveAndToGoal < -1) {
+			determineInnerCorner(room, pos, moveBy.cpy().rotate(-90));
+		} else {
+			if (moveBy.x > 0.5f) {
+				// moving right
+			    setTile(room, TOP, pos);
+			} else if (moveBy.x < -0.5f) {
+				// moving left
+		    	setTile(room, BOTTOM, pos);
+		    } else if (moveBy.y > 0.5f) {
+				// moving up
+		        setTile(room, LEFT, pos);
+			} else {
+				// moving down
+		        setTile(room, RIGHT, pos);
+			}
+		}
+		
+//		int doorsLeftCount = roomMap.unexpoloredDoorCount();
+//		int diff = doorsLeftCount - room.doors.size();
+//		Gdx.app.log("debug", String.format("Doors left: %d, diff %d Roomnesia.isAllRoomsLit %s", doorsLeftCount, diff, ""+(Roomnesia.roomVisitCount > 15 && diff == 0 && Roomnesia.isAllRoomsLit)));
+
+		if (Roomnesia.roomVisitCount > 10) { // && diff == 0 && Roomnesia.isAllRoomsLit) {
 			Gdx.app.log("debug", String.format("", "################### No more doors to explore left!!! ################### "));
 			if (topTiles.size() > 0) {
 				Vector2 topTile =  topTiles.get(MathUtils.random(topTiles.size()-1));
 				setTile(room, FUSEBOX, topTile);
 				Roomnesia.fusebox = topTile.cpy();
+			} else {
+				Vector2 fusePos =  new Vector2(pos);
+				setTile(room, FUSEBOX, fusePos );
+				Roomnesia.fusebox = fusePos.cpy();
 			}
 		} else {
 			// add Doors
@@ -187,32 +194,36 @@ public class RoomBuilder {
 				for (int tryCount = 0; tryCount < topTiles.size(); tryCount++) {
 					Vector2 tilePos = topTiles.get(MathUtils.random(topTiles.size()-1));
 					if (canMakeDoorAt(blockedTiles, map, room, tilePos, new Vector2(0, 1))) {
-						setTile(room, DOOR_TOP, tilePos);
-						room.doors.add(new Door(tilePos, false));
+//						setTile(room, DOOR_TOP, tilePos);
+//						room.doors.add(new Door(tilePos, DOOR_TOP.userData.moveVec));
+				        setDoor(room, Math.round(tilePos.x), Math.round(tilePos.y), DOOR_TOP);
 						break;
 					}
 				}
 				for (int tryCount = 0; tryCount < bottomTiles.size(); tryCount++) {
 					Vector2 tilePos = bottomTiles.get(MathUtils.random(bottomTiles.size()-1));
 					if (canMakeDoorAt(blockedTiles, map, room, tilePos, new Vector2(0, -1))) {
-						setTile(room, DOOR_BOTTOM, tilePos);
-						room.doors.add(new Door(tilePos, false));
+//						setTile(room, DOOR_BOTTOM, tilePos);
+//						room.doors.add(new Door(tilePos, DOOR_BOTTOM.userData.moveVec));
+				        setDoor(room, Math.round(tilePos.x), Math.round(tilePos.y), DOOR_BOTTOM);
 						break;
 					}
 				}
 				for (int tryCount = 0; tryCount < leftTiles.size(); tryCount++) {
 					Vector2 tilePos = leftTiles.get(MathUtils.random(leftTiles.size()-1));
 					if (canMakeDoorAt(blockedTiles, map, room, tilePos, new Vector2(-1, 0))) {
-						setTile(room, DOOR_LEFT, tilePos);
-						room.doors.add(new Door(tilePos, false));
+//						setTile(room, DOOR_LEFT, tilePos);
+//						room.doors.add(new Door(tilePos, DOOR_LEFT.userData.moveVec));
+				        setDoor(room, Math.round(tilePos.x), Math.round(tilePos.y), DOOR_LEFT);
 						break;
 					}
 				}
 				for (int tryCount = 0; tryCount < rightTiles.size(); tryCount++) {
 					Vector2 tilePos = rightTiles.get(MathUtils.random(rightTiles.size()-1));
 					if (canMakeDoorAt(blockedTiles, map, room, tilePos, new Vector2(1, 0))) {
-						setTile(room, DOOR_RIGHT, tilePos);
-						room.doors.add(new Door(tilePos, false));
+//						setTile(room, DOOR_RIGHT, tilePos);
+//						room.doors.add(new Door(tilePos, DOOR_RIGHT.userData.moveVec));
+				        setDoor(room, Math.round(tilePos.x), Math.round(tilePos.y), DOOR_RIGHT);
 						break;
 					}
 				}
@@ -222,8 +233,8 @@ public class RoomBuilder {
 
 		List<Vector2> centerTiles = new ArrayList<Vector2>();
 		// add central tiles
-		for (int y = y1+1; y < y2; y++) {
-			for (int x = x1+1; x < x2; x++) {
+		for (int y = 1; y < Roomnesia.TILES_NUM_HEIGHT-1; y++) {
+			for (int x = 1; x < Roomnesia.TILES_NUM_WIDTH-1; x++) {
 				if (room.tiles[x][y] == null) {
 					if ((room.tiles[x-1][y] == LEFT || room.tiles[x-1][y] == DOOR_LEFT || room.tiles[x-1][y] == CENTER || room.tiles[x-1][y] == CORNER_BOTTOM_LEFT || room.tiles[x-1][y] == CORNER_TOP_LEFT)) {
 						if (room.tiles[x][y-1] == BOTTOM || room.tiles[x][y-1] == DOOR_BOTTOM || room.tiles[x][y-1] == CENTER || room.tiles[x][y-1] == CORNER_BOTTOM_LEFT || room.tiles[x][y-1] == CORNER_BOTTOM_RIGHT) {
@@ -246,12 +257,99 @@ public class RoomBuilder {
 //		}
 		
 		// add tiles for realz
-		for (int x = x1; x <= x2; x++) {
-			for (int y = y1; y <= y2; y++) {
+		for (int x = 0; x < Roomnesia.TILES_NUM_WIDTH; x++) {
+			for (int y = 0; y < Roomnesia.TILES_NUM_HEIGHT; y++) {
 				if (room.tiles[x][y] !=  null) {
 					addRoomTile(room.tiles[x][y], world, roomMap, room, x, y);
 				}
 			}
+		}
+		return true;
+	}
+
+	private static void setDoor(Room room, int startX, int startY, RoomTile doorLeft) {
+		room.tiles[startX][startY] = doorLeft;
+		room.doors.add(new Door(new Vector2(startX, startY) , doorLeft.userData.moveVec));
+	}
+
+	public static void determineStraight(Room room, Vector2 pos, Vector2 moveBy, Room[][] map, List<Vector2> topTiles,
+			List<Vector2> bottomTiles, List<Vector2> leftTiles, List<Vector2> rightTiles) {
+		if (moveBy.x > 0.5f) {
+			// moving right
+			if (Math.round(pos.y)+1 < Roomnesia.TILES_NUM_HEIGHT && map[Math.round(pos.x)][Math.round(pos.y+1)] != null 
+					&& map[Math.round(pos.x)][Math.round(pos.y+1)].tiles[Math.round(pos.x)][Math.round(pos.y+1)] == DOOR_BOTTOM) {
+			    // there is a door above, place matching door
+		        setTile(room, DOOR_TOP, pos);
+		        setDoor(room, Math.round(pos.x), Math.round(pos.y), DOOR_TOP);
+			} else {
+			    setTile(room, TOP, pos);
+			    topTiles.add(pos.cpy());
+		    }
+		} else if (moveBy.x < -0.5f) {
+			// moving left
+		    if (Math.round(pos.y) > 0 && map[Math.round(pos.x)][Math.round(pos.y-1)] != null 
+		    		&& map[Math.round(pos.x)][Math.round(pos.y-1)].tiles[Math.round(pos.x)][Math.round(pos.y-1)] == DOOR_TOP) {
+		        // there is a door below, place matching door
+		        setTile(room, DOOR_BOTTOM, pos);
+		        setDoor(room, Math.round(pos.x), Math.round(pos.y), DOOR_BOTTOM);
+		    } else {
+		        setTile(room, BOTTOM, pos);
+		        bottomTiles.add(pos.cpy());
+		    }
+		} else if (moveBy.y > 0.5f) {
+			// moving up
+		    if (Math.round(pos.x) > 0 && map[Math.round(pos.x-1)][Math.round(pos.y)] != null 
+		    		&& map[Math.round(pos.x-1)][Math.round(pos.y)].tiles[Math.round(pos.x-1)][Math.round(pos.y)] == DOOR_RIGHT) {
+		        // there is a door to the left, place matching door
+		        setTile(room, DOOR_LEFT, pos);
+		        setDoor(room, Math.round(pos.x), Math.round(pos.y), DOOR_LEFT);
+		    } else {
+		        setTile(room, LEFT, pos);
+		        leftTiles.add(pos.cpy());
+		    }
+		} else {
+			// moving down
+		    if (Math.round(pos.x)+1 < Roomnesia.TILES_NUM_WIDTH && map[Math.round(pos.x+1)][Math.round(pos.y)] != null 
+		    		&& map[Math.round(pos.x+1)][Math.round(pos.y)].tiles[Math.round(pos.x+1)][Math.round(pos.y)] == DOOR_LEFT) {
+		        // there is a door to the left, place matching door
+		        setTile(room, DOOR_RIGHT, pos);
+		        setDoor(room, Math.round(pos.x), Math.round(pos.y), DOOR_RIGHT);
+		    } else {
+		        setTile(room, RIGHT, pos);
+		        rightTiles.add(pos.cpy());
+		    }
+		}
+	}
+
+	public static void determineInnerCorner(Room room, Vector2 pos, Vector2 moveBy) {
+		if (moveBy.x > 0.5f) {
+			// moving right
+			setTile(room, CORNER_TOP_RIGHT, pos);
+		} else if (moveBy.x < -0.5f) {
+			// moving left
+			setTile(room, CORNER_BOTTOM_LEFT, pos);
+		} else if (moveBy.y > 0.5f) {
+			// moving up
+			setTile(room, CORNER_TOP_LEFT, pos);
+		} else {
+			// moving down
+			setTile(room, CORNER_BOTTOM_RIGHT, pos);
+		}
+	}
+
+	public static void determineOuterCorner(Room room, Vector2 pos, Vector2 moveBy) {
+		if (moveBy.x > 0.5f) {
+			// moving right
+			setTile(room, TOP_LEFT, pos);
+		} else if (moveBy.x < -0.5f) {
+			// moving left
+			setTile(room, BOTTOM_RIGHT, pos);
+		} else if (moveBy.y > 0.5f) {
+			// moving up
+			setTile(room, BOTTOM_LEFT, pos);
+		} else {
+			// moving down
+			setTile(room, TOP_RIGHT, pos);
 		}
 	}
 
@@ -312,9 +410,12 @@ public class RoomBuilder {
 
 	private static boolean canMakeDoorAt(Set<Vector2> blockedTiles, Room[][] map, Room room, Vector2 tilePos, Vector2 moveBy) {
 		Vector2 pos = tilePos.cpy().add(moveBy);
-		if (!canMoveBy(map, pos, moveBy, blockedTiles) || !canMoveBy(map, pos, moveBy.cpy().scl(2f), blockedTiles)
-				|| !canMoveBy(map, pos.cpy().add(moveBy.cpy().rotate(90)), moveBy,blockedTiles) || !canMoveBy(map, pos.cpy().add(moveBy.cpy().rotate(90)), moveBy.cpy().scl(2f),blockedTiles)
-				|| !canMoveBy(map, pos.cpy().add(moveBy.cpy().rotate(-90)), moveBy,blockedTiles) || !canMoveBy(map, pos.cpy().add(moveBy.cpy().rotate(-90)), moveBy.cpy().scl(2f),blockedTiles)) {
+		if (!canMoveBy(room, map, pos, moveBy, 0, 0, Roomnesia.TILES_NUM_WIDTH-1, Roomnesia.TILES_NUM_HEIGHT-1, blockedTiles, false, false) 
+				|| !canMoveBy(room, map, pos, moveBy.cpy().scl(2f), 0, 0, Roomnesia.TILES_NUM_WIDTH-1, Roomnesia.TILES_NUM_HEIGHT-1, blockedTiles, false, false)
+				|| !canMoveBy(room, map, pos.cpy().add(moveBy.cpy().rotate(90)), moveBy, 0, 0, Roomnesia.TILES_NUM_WIDTH-1, Roomnesia.TILES_NUM_HEIGHT-1, blockedTiles, false, false) 
+				|| !canMoveBy(room, map, pos.cpy().add(moveBy.cpy().rotate(90)), moveBy.cpy().scl(2f), 0, 0, Roomnesia.TILES_NUM_WIDTH-1, Roomnesia.TILES_NUM_HEIGHT-1, blockedTiles, false, false)
+				|| !canMoveBy(room, map, pos.cpy().add(moveBy.cpy().rotate(-90)), moveBy, 0, 0, Roomnesia.TILES_NUM_WIDTH-1, Roomnesia.TILES_NUM_HEIGHT-1, blockedTiles, false, false) 
+				|| !canMoveBy(room, map, pos.cpy().add(moveBy.cpy().rotate(-90)), moveBy.cpy().scl(2f), 0, 0, Roomnesia.TILES_NUM_WIDTH-1, Roomnesia.TILES_NUM_HEIGHT-1, blockedTiles, false, false)) {
 			return false;
 		}
 		return true;
@@ -324,21 +425,29 @@ public class RoomBuilder {
 		room.tiles[Math.round(pos.x)][Math.round(pos.y)] = tile;
 	}
 
-	private static boolean canMoveBy(Room[][] map, Vector2 orgPos, Vector2 moveBy, Set<Vector2> blockedTiles) {
-		return canMoveBy(map, orgPos, moveBy, 0, 0, Roomnesia.TILES_NUM_WIDTH-1, Roomnesia.TILES_NUM_HEIGHT-1, blockedTiles, false);
+	private static boolean canMoveBy(Room room, Room[][] map, Vector2 orgPos, Vector2 moveBy, Set<Vector2> blockedTiles) {
+		return canMoveBy(room, map, orgPos, moveBy, 0, 0, Roomnesia.TILES_NUM_WIDTH-1, Roomnesia.TILES_NUM_HEIGHT-1, blockedTiles, false, false);
 	}
 	
-	private static boolean canMoveBy(Room[][] map, Vector2 orgPos, Vector2 moveBy, int x1, int y1, int x2, int y2, Set<Vector2> blockedTiles) {
-		return canMoveBy(map, orgPos, moveBy, x1, y1, x2, y2, blockedTiles, true);
+	private static boolean canMoveBy(Room room, Room[][] map, Vector2 orgPos, Vector2 moveBy, int x1, int y1, int x2, int y2, Set<Vector2> blockedTiles) {
+		return canMoveBy(room, map, orgPos, moveBy, x1, y1, x2, y2, blockedTiles, true, false);
 	}
 	
-	private static boolean canMoveBy(Room[][] map, Vector2 orgPos, Vector2 moveBy, int x1, int y1, int x2, int y2, Set<Vector2> blockedTiles, boolean checkRightRecursivley) {
+	private static boolean canMoveBy(Room room, Room[][] map, Vector2 orgPos, Vector2 moveBy, int x1, int y1, int x2, int y2, Set<Vector2> blockedTiles, boolean checkRightRecursivley, boolean ignoreOwnTilesAtRecursiveCheck) {
 		Vector2 pos = orgPos.cpy().add(moveBy);
+//		Gdx.app.log("debug", String.format("Checking if can move to %s", pos));
+		if (Math.round(pos.x) >= Roomnesia.TILES_NUM_WIDTH || Math.round(pos.y) >= Roomnesia.TILES_NUM_HEIGHT
+				|| Math.round(pos.x) < 0 || Math.round(pos.y) < 0) {
+			return false;
+		}
+		if (!ignoreOwnTilesAtRecursiveCheck && room.tiles[Math.round(pos.x)][Math.round(pos.y)] != null) {
+			return false;
+		}
 		if (blockedTiles != null) {
 			for (Vector2 vec : blockedTiles) {
 				if (pos.cpy().sub(vec).len() < 0.9f) {
 					Gdx.app.log("debug", String.format("Tile is blocked %s", pos));
-					return false;
+					return true;
 				}
 			}
 		}
@@ -347,7 +456,7 @@ public class RoomBuilder {
 				|| map[Math.round(pos.x)][Math.round(pos.y)] != null) {
 			return false;
 		}
-		if (!checkRightRecursivley || canMoveBy(map, pos, moveBy.cpy().rotate(-90), x1, y1, x2, y2, blockedTiles, false)) {
+		if (!checkRightRecursivley || canMoveBy(room, map, pos, moveBy.cpy().rotate(-90), x1, y1, x2, y2, blockedTiles, false, true)) {
 			return true;
 		}
 		Gdx.app.debug("debug", String.format("could move to %s but the tile right next to it is not available", pos));
@@ -480,7 +589,7 @@ public class RoomBuilder {
 		addRoomTile(BOTTOM, world, map, room,        x+1, y-2);
 		addRoomTile(BOTTOM_RIGHT, world, map, room,  x+2, y-2);
 		
-		room.doors.add(new Door(new Vector2(x, y-2), false));
+		room.doors.add(new Door(new Vector2(x, y-2), new Vector2(0, -1)));
 		
 		return room;
 	}
@@ -499,7 +608,7 @@ public class RoomBuilder {
 		addRoomTile(BOTTOM, world, map, room, x, y-1);
 		addRoomTile(BOTTOM_RIGHT, world, map, room, x+1, y-1);
 
-		room.doors.add(new Door(new Vector2(x, y+1), false));
+		room.doors.add(new Door(new Vector2(x, y+1), new Vector2(0, 1)));
 		
 		return room;
 	}
@@ -537,14 +646,14 @@ public class RoomBuilder {
 					world.destroyBody(body);
 				}
 			}
-			for (Door door : room.doors) {
-				for (Room room2 : map.rooms) {
-					Door door2 = room2.doorAt(door.pos);
-					if (door2 != null) {
-						door2.isExplored = false;
-					}
-				}
-			}
+//			for (Door door : room.doors) {
+//				for (Room room2 : map.rooms) {
+//					Door door2 = room2.doorAt(door.pos);
+//					if (door2 != null) {
+//						door2.isExplored = false;
+//					}
+//				}
+//			}
 			for (Torch light : room.lights) {
 				light.dispose();
 			}

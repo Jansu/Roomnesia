@@ -41,11 +41,11 @@ public class Roomnesia extends InputAdapter implements ApplicationListener {
 
 	private final static int MAX_FPS = 60;
 	private final static int MIN_FPS = 15;
-	private final static float TIME_STEP = 1f / MAX_FPS;
+	final static float TIME_STEP = 1f / MAX_FPS;
 	private final static float MAX_STEPS = 1f + MAX_FPS / MIN_FPS;
 	private final static float MAX_TIME_PER_FRAME = TIME_STEP * MAX_STEPS;
-	private final static int VELOCITY_ITERS = 6;
-	private final static int POSITION_ITERS = 2;
+	final static int VELOCITY_ITERS = 6;
+	final static int POSITION_ITERS = 2;
 	
 	public static final short GROUP_INDEX_PLAYER = 1;
 	public static final short GROUP_INDEX_DOOR = 2;
@@ -77,9 +77,9 @@ public class Roomnesia extends InputAdapter implements ApplicationListener {
 
 	static RayHandler rayHandler;
 	static World world;
-	OrthographicCamera camera;
+	static OrthographicCamera camera;
 
-	Box2DDebugRenderer debugRenderer;
+	static Box2DDebugRenderer debugRenderer;
 	boolean debugEnabled = false;
 	ExtendViewport viewport;
 
@@ -95,6 +95,7 @@ public class Roomnesia extends InputAdapter implements ApplicationListener {
 	private PointLight playerLight;
 	
 	private boolean showTitle = true;
+	public static boolean isAllRoomsLit = false;
 	
 	@Override
 	public void create() {
@@ -205,7 +206,9 @@ public class Roomnesia extends InputAdapter implements ApplicationListener {
 	}
 
 	private void handleText() {
-		if (roomVisitCount == 1) {
+		if (debugEnabled) {
+			showText(roomVisitCount+ "," + map.unexpoloredDoorCount(), 5f);
+		} else if (roomVisitCount == 1) {
 			showText("I have a sever case of Amnesia. \nSometimes I forget things that happend \njust seconds ago ", 5f);
 		} else if (roomVisitCount == 2) {
 			showText("I have a sever case of Amnesia. \nSometimes I forget things that happend \njust seconds ago. Rooms, too.", 5f);
@@ -215,13 +218,13 @@ public class Roomnesia extends InputAdapter implements ApplicationListener {
 			showText("I have trouble remembering those rooms.", 5f);
 		} else if (roomVisitCount == 5) {
 			showText("Maybe I will be able to\n remeber the rooms,\n if I light them up.", 5f);
-		} else if (roomVisitCount == 7) {
+		} else if (roomVisitCount == 6) {
 			showText("I wonder what happend\n to those giant spiders, \n that I was keeping here...", 5f);
-		} else if (roomVisitCount == 9) {
+		} else if (roomVisitCount == 7) {
 			showText("It sure is dark in here.", 5f);
-		} else if (roomVisitCount == 10) {
+		} else if (roomVisitCount == 8) {
 			showText("Did you hear that?!", 5f);
-		} else if (roomVisitCount == 11) {
+		} else if (roomVisitCount == 9) {
 			showText("I think that was the sounds \nof someone running out of time, \njust before implementing \ngiant spiders in the basement!", 5f);
 		} else if (roomVisitCount == 13) {
 			showText("There may or may not be \n" + map.unexpoloredDoorCount() + " more doors for me to go through...", 5f);
@@ -280,6 +283,8 @@ public class Roomnesia extends InputAdapter implements ApplicationListener {
 
 	@Override
 	public void render() {
+//		isAllRoomsLit  = map.isAllRoomsLit();
+		
 		Gdx.gl.glClearColor(0, 0, 0, 1);
 		Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 		
@@ -572,9 +577,9 @@ public class Roomnesia extends InputAdapter implements ApplicationListener {
 //			camera.update();
 //			return true;
 //			
-//		case Input.Keys.F1:
-//			debugEnabled = !debugEnabled;
-//			return true;
+		case Input.Keys.F1:
+			debugEnabled = !debugEnabled;
+			return true;
 //
 //		case Input.Keys.F5:
 //			for (Light light : lights) {
